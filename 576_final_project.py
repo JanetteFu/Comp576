@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 """ 576 final project.ipynb """
 
-from google.colab import files
-files.upload()
-
 import pandas as pd
 import numpy as np
 
@@ -13,6 +10,32 @@ steam_user.rename(columns={0:"id",1:"game",2:"action",3:"hour"}, inplace=True)
 steam_user.head()
 
 steam_purchase = steam_user[steam_user["action"] == "purchase"]
+
+from fuzzywuzzy import fuzz, process
+def merge_similar_games(df, column_name, threshold=80):
+    """
+    Merge similar game names based on fuzzy matching.
+    """
+    game_names = df[column_name].tolist()
+    unique_names = []
+    name_map = {}
+
+    for name in game_names:
+        # Find the best match
+        best_match = process.extractOne(name, unique_names, scorer=fuzz.ratio)
+        if best_match and best_match[1] >= threshold:
+            # Map similar names
+            canonical_name = best_match[0]
+            name_map[name] = canonical_name
+        else:
+            # Add new unique name
+            unique_names.append(name)
+            name_map[name] = name
+
+    df[column_name] = df[column_name].map(name_map)
+    return df
+
+steam_user = merge_similar_games(steam_user, 'game', threshold=90)
 
 observed = []
 target = []
@@ -63,14 +86,6 @@ observed_user = pd.concat(observed)
 target_user = pd.concat(target)
 
 final_users.to_csv('/content/final_users.csv', index=False)
-
-files.download('/content/final_users.csv')
-
-import pandas as pd
-import numpy as np
-
-from google.colab import files
-files.upload()
 
 final_users = pd.read_csv("final_users.csv")
 final_users.head()
