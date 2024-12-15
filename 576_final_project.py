@@ -145,32 +145,36 @@ tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 model = BertModel.from_pretrained('bert-base-uncased')
 
 #tokenize and embedding using bert
-def get_bert_embedding(text):
-    # Tokenize the text
-    inputs = tokenizer(text, return_tensors='pt', padding=True, truncation=True, max_length=512)
+def get_bert_embeddings_batch(text_list):
+    inputs = tokenizer(text_list, return_tensors='pt', padding=True, truncation=True, max_length=512)
 
-    # Pass the tokenized input through the BERT model
+    # Pass the tokenization input through the BERT model
     with torch.no_grad():
         outputs = model(**inputs)
+        
+    embeddings = outputs.last_hidden_state.mean(dim=1)
+    return embeddings.cpu().numpy()
 
-    # The embeddings are in the last_hidden_state, we take the mean of the embeddings across all tokens
-    # to represent the whole sequence
-    embeddings = outputs.last_hidden_state.mean(dim=1).squeeze()
+# Process each column
+def process_column_bert(df, column_name, output_column_name, batch_size=32):
+    embeddings = []
+    texts = df[column_name].fillna("None").astype(str).tolist()
 
-    return embeddings.numpy()
+    for i in tqdm(range(0, len(texts), batch_size), desc=f"Processing {column_name}"):
+        batch_texts = texts[i:i+batch_size]
+        batch_embeddings = get_bert_embeddings_batch(batch_texts)
+        embeddings.extend(batch_embeddings)
 
-observed_user['game_description'] = observed_user['game_description'].astype(str)
+    df[output_column_name] = embeddings
+    return df
 
-observed_user['description_bert'] = observed_user['game_description'].apply(get_bert_embedding)
-
-observed_user['game_details'] = observed_user['game_details'].fillna("None").astype(str)
-observed_user['details_bert'] = observed_user['game_details'].apply(get_bert_embedding)
-
-observed_user['popular_tags'] = observed_user['popular_tags'].fillna("None").astype(str)
-observed_user['tags_bert'] = observed_user['popular_tags'].apply(get_bert_embedding)
+# for these text-heavy columns, used bert
+observed_user = process_column_bert(observed_user, 'game_description', 'description_bert')
+observed_user = process_column_bert(observed_user, 'game_details', 'details_bert')
+observed_user = process_column_bert(observed_user, 'popular_tags', 'tags_bert')
 
 observed_result = observed_user[['id','game']]
-previous_cleanedText = pd.concat([observed_user[],observed_user['original_price'], observed_user['description_bert'],
+previous_cleanedText = pd.concat([observed_user['id'],observed_user['original_price'], observed_user['description_bert'],
                                genre_tfidf, languages_tfidf, observed_user['details_bert'], observed_user['tags_bert']], axis=1)
 
 observed_target = observed_result.groupby('id')['game'].apply(', '.join).reset_index(name='concatenated_games').drop('id')
