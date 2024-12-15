@@ -42,7 +42,7 @@ steam_game['original_price'].describe()
 
 steam_game.rename(columns={'name':'game'}, inplace=True)
 
-steam_final = pd.merge(filtered_user, steam_game, how="left", on="game")
+steam_final = pd.merge(steam_purchase, steam_game, how="left", on="game")
 steam_final.head()
 
 steam_final = steam_final.dropna(subset=["genre"])
@@ -55,9 +55,10 @@ filtered_ids = user_counts[user_counts > 9].index
 final_users = steam_final[steam_final['id'].isin(filtered_ids)]
 
 for user_id, group in final_users.groupby('id'):
-    group_sorted = group.head(10)  # Take the first 10 appearances
-    observed.append(group_sorted.iloc[:9])  # First 9 as observed
-    target.append(group_sorted.iloc[9:10])  # 10th as target
+    if len(group) >= 10:
+        group_sorted = group.head(10)
+        observed.append(group_sorted.iloc[:9])
+        target.append(group_sorted.iloc[9:10])
 observed_user = pd.concat(observed)
 target_user = pd.concat(target)
 
@@ -146,32 +147,27 @@ model = BertModel.from_pretrained('bert-base-uncased')
 
 #tokenize and embedding using bert
 def get_bert_embeddings_batch(text_list):
-    inputs = tokenizer(text_list, return_tensors='pt', padding=True, truncation=True, max_length=512)
 
-    # Pass the tokenization input through the BERT model
+    processed_texts = []
+    for text in text_list:
+        if not isinstance(text, str) or text.strip() == "":  # Handle empty or invalid text
+            processed_texts.append("[EMPTY]")  # Default placeholder
+        else:
+            # Truncate text intelligently
+            truncated_text = text[:512] if len(text) > 512 else text
+            processed_texts.append(truncated_text)
+    
+    # Tokenize and process batch
+    inputs = tokenizer(processed_texts, return_tensors='pt', padding=True, truncation=True, max_length=512)
     with torch.no_grad():
         outputs = model(**inputs)
-        
-    embeddings = outputs.last_hidden_state.mean(dim=1)
-    return embeddings.cpu().numpy()
+    
+    # Compute mean pooling of the embeddings
+    return outputs.last_hidden_state.mean(dim=1).cpu().numpy()
 
-# Process each column
-def process_column_bert(df, column_name, output_column_name, batch_size=32):
-    embeddings = []
-    texts = df[column_name].fillna("None").astype(str).tolist()
-
-    for i in tqdm(range(0, len(texts), batch_size), desc=f"Processing {column_name}"):
-        batch_texts = texts[i:i+batch_size]
-        batch_embeddings = get_bert_embeddings_batch(batch_texts)
-        embeddings.extend(batch_embeddings)
-
-    df[output_column_name] = embeddings
-    return df
-
-# for these text-heavy columns, used bert
-observed_user = process_column_bert(observed_user, 'game_description', 'description_bert')
-observed_user = process_column_bert(observed_user, 'game_details', 'details_bert')
-observed_user = process_column_bert(observed_user, 'popular_tags', 'tags_bert')
+observed_user['description_bert'] = get_bert_embeddings_batch(observed_user['game_description'].tolist())
+observed_user['details_bert'] = get_bert_embeddings_batch(observed_user['game_details'].tolist())
+observed_user['tags_bert] = get_bert_embeddings_batch(observed_user['popular_tags'].tolist())
 
 observed_result = observed_user[['id','game']]
 previous_cleanedText = pd.concat([observed_user['id'],observed_user['original_price'], observed_user['description_bert'],
@@ -197,7 +193,7 @@ pca_cleanedText = pca.fit_transform(grouped_cleanedText)
 def knn_evaluate(selected, observed_target, final_target):
     correct_select_5 = [0]*len(final_target)
     correct_select_15 = [0]*len(final_target)
-    for i in range(final_target):
+    for i in range(len(final_target)):
       select_game = np.concatenate([observed_target[i] for i in selected])
       word_counts = Counter(select_game)
 
@@ -214,13 +210,9 @@ def knn_evaluate(selected, observed_target, final_target):
     accuracy_15 = sum(correct_select_15) / len(final_target)
     return accuracy_5, accuracy_15
 
-import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.model_selection import cross_val_score
 from sklearn.neighbors import KNeighborsClassifier
-
-# Example dataset
-from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 
 X_train, X_test, y_train, y_test = train_test_split(pca_cleanedText, final_target, test_size=0.3, random_state=42)
@@ -253,12 +245,10 @@ plt.show()
 
 """Build the LSTM model"""
 
-import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Embedding
 from tensorflow.keras.utils import to_categorical
-from sklearn.model_selection import train_test_split
 
 # Prepare the data
 X = np.array(previous_cleanedText)
@@ -315,7 +305,7 @@ def ensemble_evaluate(selected, observed_target, final_target, predicted_probabi
 def accuracy_ensemble(top_5_games, top_15_games, final_target):
     correct_select_5 = [0]*len(final_target)
     correct_select_15 = [0]*len(final_target)
-    for i in range(final_target):
+    for i in range(len(final_target)):
       if(final_target[i] in top_5_games[i]):
           correct_select_5[i] = 1
       if(final_target[i] in top_15_games[i]):
