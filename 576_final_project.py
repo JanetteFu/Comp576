@@ -13,40 +13,19 @@ files.upload()
 import pandas as pd
 import numpy as np
 
-steam_user = pd.read_csv("steam-200k.csv",header=None)
+steam_user = pd.read_csv("user_info.csv",header=None)
 steam_user.rename(columns={0:"id",1:"game",2:"action",3:"hour"}, inplace=True)
 
 steam_user.head()
 
 steam_purchase = steam_user[steam_user["action"] == "purchase"]
-user_counts = steam_purchase['id'].value_counts()
-
-# Filter IDs with more than 10 appearances
-filtered_ids = user_counts[user_counts > 10].index
-
-# Select rows corresponding to those IDs
-filtered_user = steam_purchase[steam_purchase['id'].isin(filtered_ids)]
-
-print(filtered_user.head())
 
 observed = []
 target = []
 
-for user_id, group in filtered_user.groupby('id'):
-    # Sort by appearance order if necessary (assuming current order is correct)
-    group_sorted = group.head(11)  # Take the first 11 appearances
-    observed.append(group_sorted.iloc[:10])  # First 10 as observed
-    target.append(group_sorted.iloc[10:11])  # 11th as target
-
-# Combine results
-observed_user = pd.concat(observed)
-target_user = pd.concat(target)
-
-observed_user.head()
-
 files.upload()
 
-steam_game = pd.read_csv("steam_games2.csv")
+steam_game = pd.read_csv("game_info.csv")
 
 steam_game.head()
 
@@ -56,16 +35,13 @@ import re
 steam_game['original_price'] = steam_game['original_price'].fillna("$0.00")
 
 def clean_price(price):
-    # Check if the price doesn't match the format "$ XX.XX" (where X is a digit)
-    if not re.match(r'^\$\d+(\.\d{2})?$', str(price)):  # This matches prices like "$39.99", "$0.99", "$100"
+    # Check if the price doesn't match the format "$ XX.XX"
+    if not re.match(r'^\$\d+(\.\d{2})?$', str(price)):
         return "$0.00"
     else:
         return price
 
-# Apply the function to the 'original_price' column
 steam_game['original_price'] = steam_game['original_price'].apply(clean_price)
-
-# Now remove the '$' sign and commas, and convert to float
 steam_game['original_price'] = steam_game['original_price'].replace({'\$': '', ',': ''}, regex=True).astype(float)
 
 steam_game['original_price'].describe()
@@ -73,20 +49,23 @@ steam_game['original_price'].describe()
 steam_game.rename(columns={'name':'game'}, inplace=True)
 
 steam_final = pd.merge(filtered_user, steam_game, how="left", on="game")
-
 steam_final.head()
 
 steam_final = steam_final.dropna(subset=["genre"])
-
 steam_final.describe()
 
 user_counts = steam_final['id'].value_counts()
-
-# Filter IDs with more than 10 appearances
-filtered_ids = user_counts[user_counts > 6].index
+filtered_ids = user_counts[user_counts > 9].index
 
 # Select rows corresponding to those IDs
 final_users = steam_final[steam_final['id'].isin(filtered_ids)]
+
+for user_id, group in final_users.groupby('id'):
+    group_sorted = group.head(10)  # Take the first 10 appearances
+    observed.append(group_sorted.iloc[:9])  # First 9 as observed
+    target.append(group_sorted.iloc[9:10])  # 10th as target
+observed_user = pd.concat(observed)
+target_user = pd.concat(target)
 
 final_users.to_csv('/content/final_users.csv', index=False)
 
@@ -100,19 +79,6 @@ files.upload()
 
 final_users = pd.read_csv("final_users.csv")
 final_users.head()
-
-observed = []
-target = []
-
-for user_id, group in final_users.groupby('id'):
-    # Sort by appearance order if necessary (assuming current order is correct)
-    group_sorted = group.head(11)  # Take the first 11 appearances
-    observed.append(group_sorted.iloc[:10])  # First 10 as observed
-    target.append(group_sorted.iloc[10:11])  # 11th as target
-
-# Combine results
-observed_user = pd.concat(observed)
-target_user = pd.concat(target)
 
 observed_user['game'].describe()
 
@@ -128,7 +94,7 @@ plt.title('Top 10 Frequency of Games', fontsize=16)
 plt.xlabel('Game', fontsize=14)
 plt.ylabel('Frequency', fontsize=14)
 plt.xticks(rotation=90)  # Rotate game names for better readability
-plt.tight_layout()  # Adjust layout to prevent clipping of labels
+plt.tight_layout() 
 
 # Show the plot
 plt.show()
@@ -140,21 +106,18 @@ vectorizer = CountVectorizer(tokenizer=lambda x: x.split(','))
 observed_user['languages'] = observed_user['languages'].fillna("None")
 languages = vectorizer.fit_transform(observed_user['languages'])
 
-# Step 2: Apply TF-IDF Transformation to the tokenized data
+# Apply TF-IDF Transformation to the tokenized data
 transformer = TfidfTransformer()
 languages_tfidf = transformer.fit_transform(languages)
 
-# Step 3: Convert the result to a DataFrame for easy viewing
 languages_tfidf = pd.DataFrame(languages_tfidf.toarray(), columns=vectorizer.get_feature_names_out())
 
 observed_user['genre'] = observed_user['genre'].fillna("None")
 genre = vectorizer.fit_transform(observed_user['genre'])
 
-# Step 2: Apply TF-IDF Transformation to the tokenized data
 transformer = TfidfTransformer()
 genre_tfidf = transformer.fit_transform(genre)
 
-# Step 3: Convert the result to a DataFrame for easy viewing
 genre_tfidf = pd.DataFrame(genre_tfidf.toarray(), columns=vectorizer.get_feature_names_out())
 
 from wordcloud import WordCloud
@@ -164,11 +127,10 @@ from collections import Counter
 # Count word frequencies
 split_genres = [sentence.split(", ") for sentence in observed_user['genre']]
 
-# Flatten the list of lists and count word frequencies
 flat_genres = [genre for sublist in split_genres for genre in sublist]
 word_counts = Counter(flat_genres)
 
-# Generate word cloud
+# word cloud
 wordcloud = WordCloud(
     width=800,
     height=400,
@@ -176,7 +138,6 @@ wordcloud = WordCloud(
     colormap='viridis'
 ).generate_from_frequencies(word_counts)
 
-# Plot the word cloud
 plt.figure(figsize=(10, 5))
 plt.imshow(wordcloud, interpolation='bilinear')
 plt.axis('off')
@@ -189,7 +150,7 @@ from transformers import BertTokenizer, BertModel
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 model = BertModel.from_pretrained('bert-base-uncased')
 
-# Function to tokenize and get embeddings for each popular_tags entry
+#tokenize and embedding using bert
 def get_bert_embedding(text):
     # Tokenize the text
     inputs = tokenizer(text, return_tensors='pt', padding=True, truncation=True, max_length=512)
@@ -203,8 +164,6 @@ def get_bert_embedding(text):
     embeddings = outputs.last_hidden_state.mean(dim=1).squeeze()
 
     return embeddings.numpy()
-
-# Apply the function to the 'popular_tags' column to get the embeddings
 
 observed_user['game_description'] = observed_user['game_description'].astype(str)
 
@@ -227,11 +186,9 @@ grouped_cleanedText = previous_cleanedText.groupby('id').agg(lambda x: ', '.join
 
 final_target = target_user['game']
 
-"""Use PCA to reduce the dimension"""
-
+"""PCA for dim-reduction"""
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
-
 
 X_dim = grouped_cleanedText.shape[1]
 # Perform PCA to reduce the data to 2 principal components
@@ -239,7 +196,6 @@ pca = PCA(n_components=round(X_dim/5))
 pca_cleanedText = pca.fit_transform(grouped_cleanedText)
 
 """Build the KNN model"""
-
 def knn_evaluate(selected, observed_target, final_target):
     correct_select_5 = [0]*len(final_target)
     correct_select_15 = [0]*len(final_target)
@@ -271,8 +227,7 @@ from sklearn.model_selection import train_test_split
 
 X_train, X_test, y_train, y_test = train_test_split(pca_cleanedText, final_target, test_size=0.3, random_state=42)
 
-# Range of K to test
-k_values = range(1, 15)
+k_values = range(3, 12)
 accuracies = []
 
 # Loop through K values
@@ -286,7 +241,6 @@ for k in k_values:
     # Append mean accuracy
     accuracies.append(scores)
 
-# Plot the elbow curve
 plt.figure(figsize=(8, 5))
 plt.plot(k_values, accuracies, marker='o', color='blue', linewidth=2)
 plt.xlabel('Number of Neighbors (K)', fontsize=12)
@@ -319,12 +273,10 @@ vocab_size = X_train.shape[1]
 model = Sequential()
 model.add(Embedding(input_dim=vocab_size, output_dim=128, input_length=X.shape[1]))  # Adjust vocab_size and input_length
 model.add(LSTM(64, return_sequences=False))
-model.add(Dense(y.shape[1], activation='softmax'))  # Adjust output units to match the number of classes
+model.add(Dense(y.shape[1], activation='softmax'))
 
-# Compile the model
 model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
-# Train the model
 model.fit(X_train, y_train, epochs=10, batch_size=32, validation_data=(X_test, y_test))
 LSTM_predicted_probabilities = model.predict(X_test)
 
