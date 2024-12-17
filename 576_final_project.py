@@ -1,5 +1,9 @@
 import pandas as pd
 import numpy as np
+from google.colab import files
+import matplotlib.pyplot as plt
+
+files.upload()
 
 steam_user = pd.read_csv("user_info.csv",header=None)
 steam_user.rename(columns={0:"id",1:"game",2:"action",3:"hour"}, inplace=True)
@@ -7,32 +11,6 @@ steam_user.rename(columns={0:"id",1:"game",2:"action",3:"hour"}, inplace=True)
 steam_user.head()
 
 steam_purchase = steam_user[steam_user["action"] == "purchase"]
-
-from fuzzywuzzy import fuzz, process
-def merge_similar_games(df, column_name, threshold=80):
-    """
-    Merge similar game names based on fuzzy matching.
-    """
-    game_names = df[column_name].tolist()
-    unique_names = []
-    name_map = {}
-
-    for name in game_names:
-        # Find the best match
-        best_match = process.extractOne(name, unique_names, scorer=fuzz.ratio)
-        if best_match and best_match[1] >= threshold:
-            # Map similar names
-            canonical_name = best_match[0]
-            name_map[name] = canonical_name
-        else:
-            # Add new unique name
-            unique_names.append(name)
-            name_map[name] = name
-
-    df[column_name] = df[column_name].map(name_map)
-    return df
-
-steam_user = merge_similar_games(steam_user, 'game', threshold=90)
 
 observed = []
 target = []
@@ -77,8 +55,8 @@ final_users = steam_final[steam_final['id'].isin(filtered_ids)]
 for user_id, group in final_users.groupby('id'):
     if len(group) >= 10:
         group_sorted = group.head(10)
-        observed.append(group_sorted.iloc[:9])
-        target.append(group_sorted.iloc[9:10])
+        observed.append(group_sorted.iloc[:9].reset_index(drop=True))
+        target.append(group_sorted.iloc[9:10].reset_index(drop=True))
 observed_user = pd.concat(observed)
 target_user = pd.concat(target)
 
@@ -179,7 +157,7 @@ def get_bert_embeddings_batch(text_list):
 
 observed_user['description_bert'] = get_bert_embeddings_batch(observed_user['game_description'].tolist())
 observed_user['details_bert'] = get_bert_embeddings_batch(observed_user['game_details'].tolist())
-observed_user['tags_bert] = get_bert_embeddings_batch(observed_user['popular_tags'].tolist())
+observed_user['tags_bert'] = get_bert_embeddings_batch(observed_user['popular_tags'].tolist())
 
 observed_result = observed_user[['id','game']]
 previous_cleanedText = pd.concat([observed_user['id'],observed_user['original_price'], observed_user['description_bert'],
@@ -206,6 +184,7 @@ def knn_evaluate(selected, observed_target, final_target):
     correct_select_5 = [0]*len(final_target)
     correct_select_15 = [0]*len(final_target)
     for i in range(len(final_target)):
+      temp_selected = np.argsort(-selected[i])[:7]
       select_game = np.concatenate([observed_target[i] for i in selected])
       word_counts = Counter(select_game)
 
@@ -263,7 +242,7 @@ from tensorflow.keras.layers import LSTM, Dense, Embedding
 from tensorflow.keras.utils import to_categorical
 
 # Prepare the data
-X = np.array(previous_cleanedText)
+X = pca_cleanedText
 y = to_categorical(np.array(final_target))  # Replace with one-hot encoded target
 
 # Split the data into training and testing sets
@@ -275,7 +254,7 @@ model.add(Embedding(input_dim=vocab_size, output_dim=128, input_length=X.shape[1
 model.add(LSTM(64, return_sequences=False))
 model.add(Dense(y.shape[1], activation='softmax'))
 
-model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
 model.fit(X_train, y_train, epochs=10, batch_size=32, validation_data=(X_test, y_test))
 LSTM_predicted_probabilities = model.predict(X_test)
@@ -292,6 +271,7 @@ def ensemble_evaluate(selected, observed_target, final_target, predicted_probabi
       nn_ranks = {game: rank for rank, game in enumerate(nn_sorted_games, start=1)}
 
     # For KNN
+      temp_selected = np.argsort(-selected[i])[:7]
       knn_select_game = np.concatenate([observed_target[i] for i in selected])
       knn_word_counts = Counter(knn_select_game)
       knn_sorted_games = [game for game, _ in knn_word_counts.most_common()]
@@ -368,7 +348,7 @@ model = LogisticRegression()
 model.fit(X_train_scaled, y_train)
 
 # Predict probabilities for all games in the dataset
-log_predicted_probabilities_log = model.predict_proba(scaler.transform(X))[:, 1]
+log_predicted_probabilities_log = model.predict_proba(scaler.transform(X))
 
 log_accuracy_5, log_prediction_accuracy_15 = accuracy_logistic(observed_target, final_target, log_predicted_probabilities)
 
