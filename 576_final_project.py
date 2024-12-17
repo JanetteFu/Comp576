@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-""" 576 final project.ipynb """
-
 import pandas as pd
 import numpy as np
 
