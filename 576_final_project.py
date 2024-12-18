@@ -167,15 +167,14 @@ store_embeddings_in_dataframe(observed_user, 'game_details', get_bert_embeddings
 store_embeddings_in_dataframe(observed_user, 'popular_tags', get_bert_embeddings_batch)
 
 observed_result = observed_user[['id','game']]
-previous_cleanedText = pd.concat([observed_user['id'],observed_user['original_price'], observed_user['description_bert'],
-                               genre_tfidf, languages_tfidf, observed_user['details_bert'], observed_user['tags_bert']], axis=1)
+previous_cleanedText = pd.concat([observed_user['id'],observed_user['original_price'], observed_user['game_description_bert'],
+                               genre_tfidf, languages_tfidf, observed_user['game_details_bert'], observed_user['popular_tags_bert']], axis=1)
 
-observed_target = observed_result.groupby('id')['game'].apply(', '.join).reset_index(name='concatenated_games').drop('id')
+observed_target = observed_result.groupby('id')['game'].apply(', '.join).reset_index(name='concatenated_games')
 
-# Group and concatenate other columns in previous_cleanedText
-grouped_cleanedText = previous_cleanedText.groupby('id').agg(lambda x: ', '.join(x.astype(str))).reset_index().drop('id')
+grouped_cleanedText = previous_cleanedText.groupby('id').agg(lambda x: ', '.join(x.astype(str))).reset_index()
 
-final_target = target_user['game']
+final_target = target_user['game'] 
 
 """PCA for dim-reduction"""
 from sklearn.decomposition import PCA
