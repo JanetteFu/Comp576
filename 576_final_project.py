@@ -191,7 +191,9 @@ def knn_evaluate(selected, observed_target, final_target):
     correct_select_15 = [0]*len(final_target)
     for i in range(len(final_target)):
       temp_selected = np.argsort(-selected[i])[:7]
-      select_game = np.concatenate([observed_target[i] for i in selected])
+      for j in selected:
+        split_string = observed_target[j].split()
+        select_game = np.concatenate(split_string)
       word_counts = Counter(select_game)
 
       sorted_games = [game for game, _ in word_counts.most_common()]
@@ -267,18 +269,20 @@ LSTM_predicted_probabilities = model.predict(X_test)
 
 """Combine two predictions"""
 
-def ensemble_evaluate(selected, observed_target, final_target, predicted_probabilities):
+def ensemble_evaluate(selected, observed_target, game_list, final_target, predicted_probabilities):
     top_5_games = []
     top_15_games = []
     for i in range(len(final_target)):
     # For LSTM
       nn_sorted_indices = np.argsort(-predicted_probabilities)
-      nn_sorted_games = [observed_target[i] for i in nn_sorted_indices]
+      nn_sorted_games = [game_list[i] for i in nn_sorted_indices]
       nn_ranks = {game: rank for rank, game in enumerate(nn_sorted_games, start=1)}
 
     # For KNN
       temp_selected = np.argsort(-selected[i])[:7]
-      knn_select_game = np.concatenate([observed_target[i] for i in selected])
+      for j in selected:
+        split_string = observed_target[j].split()
+        knn_select_game = np.concatenate(split_string)
       knn_word_counts = Counter(knn_select_game)
       knn_sorted_games = [game for game, _ in knn_word_counts.most_common()]
       knn_ranks = {game: rank for rank, game in enumerate(knn_sorted_games, start=1)}
@@ -313,17 +317,17 @@ def accuracy_ensemble(top_5_games, top_15_games, final_target):
     accuracy_15 = sum(correct_select_15) / len(final_target)
     return accuracy_5, accuracy_15
 
-top_5_games, top_15_games = ensemble_evaluate(selected, observed_target, final_target, LSTM_predicted_probabilities)
+top_5_games, top_15_games = ensemble_evaluate(selected, observed_target, game_list, final_target, LSTM_predicted_probabilities)
 ensemble_accuracy = accuracy_ensemble(top_5_games, top_15_games, final_target)
 
 """Logistic Baseline"""
 
-def accuracy_logistic(observed_target, final_target, predicted_probabilities):
+def accuracy_logistic(game_list, final_target, predicted_probabilities):
     correct_5 = [0]*len(final_target)
     correct_15 = [0]*len(final_target)
     for i in range(len(final_target)):
       log_sorted_indices = np.argsort(-predicted_probabilities[i])
-      log_sorted_games = [observed_target[i] for i in log_sorted_indices]
+      log_sorted_games = [game_list[i] for i in log_sorted_indices]
 
     # Extract the top-5 and top-15 games
       top_5_games = [game for game, score in log_sorted_games[:5]]
@@ -356,7 +360,7 @@ model.fit(X_train_scaled, y_train)
 # Predict probabilities for all games in the dataset
 log_predicted_probabilities_log = model.predict_proba(scaler.transform(X))
 
-log_accuracy_5, log_prediction_accuracy_15 = accuracy_logistic(observed_target, final_target, log_predicted_probabilities)
+log_accuracy_5, log_prediction_accuracy_15 = accuracy_logistic(game_list, final_target, log_predicted_probabilities)
 
 """SVM for comparison"""
 
@@ -376,4 +380,4 @@ svm_model.fit(X_train_scaled, y_train)
 
 # Predict probabilities for all games in the dataset
 SVM_predicted_probabilities = svm_model.predict_proba(scaler.transform(X))[:, 1]
-SVM_accuracy_5, SVM_accuracy_15 = accuracy_logistic(observed_target, final_target, SVM_predicted_probabilities)
+SVM_accuracy_5, SVM_accuracy_15 = accuracy_logistic(game_list, final_target, SVM_predicted_probabilities)
