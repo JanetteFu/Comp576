@@ -166,24 +166,43 @@ store_embeddings_in_dataframe(observed_user, 'game_description', get_bert_embedd
 store_embeddings_in_dataframe(observed_user, 'game_details', get_bert_embeddings_batch)
 store_embeddings_in_dataframe(observed_user, 'popular_tags', get_bert_embeddings_batch)
 
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+"""PCA for dim-reduction"""
+pca = PCA(n_components=15)
+description_embedding = pca.fit_transform(description_embedding)
+details_embedding = pca.fit_transform(description_embedding)
+pca = PCA(n_components=5)
+tags_embedding = pca.fit_transform(tags_embedding)
+
+tags_embedding_df = pd.DataFrame(tags_embedding, columns=[f'pca_{i+1}' for i in range(5)])
+details_embedding_df = pd.DataFrame(details_embedding, columns=[f'pca_{i+1}' for i in range(15)])
+description_embedding_df = pd.DataFrame(description_embedding, columns=[f'pca_{i+1}' for i in range(15)])
+
 observed_result = observed_user[['id','game']]
-previous_cleanedText = pd.concat([observed_user['id'],observed_user['original_price'], observed_user['game_description_bert'],
-                               genre_tfidf, languages_tfidf, observed_user['game_details_bert'], observed_user['popular_tags_bert']], axis=1)
+previous_cleanedText = pd.concat([observed_user['id'],observed_user['original_price'], description_embedding_df,
+                               genre_tfidf, languages_tfidf, details_embedding_df, tags_embedding_df], axis=1)   
+previous_cleanedText.head()
+
+previous_cleanedText['times'] = previous_cleanedText.groupby('id').cumcount() + 1
+previous_cleanedText_1 = previous_cleanedText[previous_cleanedText['times'] == 1]
+previous_cleanedText_2 = previous_cleanedText[previous_cleanedText['times'] == 2]
+previous_cleanedText_3 = previous_cleanedText[previous_cleanedText['times'] == 3]
+previous_cleanedText_4 = previous_cleanedText[previous_cleanedText['times'] == 4]
+previous_cleanedText_5 = previous_cleanedText[previous_cleanedText['times'] == 5]
+previous_cleanedText_6 = previous_cleanedText[previous_cleanedText['times'] == 6]
+previous_cleanedText_7 = previous_cleanedText[previous_cleanedText['times'] == 7]
+previous_cleanedText_8 = previous_cleanedText[previous_cleanedText['times'] == 8]
+previous_cleanedText_9 = previous_cleanedText[previous_cleanedText['times'] == 9]
+
+# Concatenate the two DataFrames vertically (i.e., stacking them along the columns)
+grouped_cleanedText = pd.concat([previous_cleanedText_1.drop(columns=['times']).reset_index(drop=True), previous_cleanedText_2.drop(columns=['id','times']).reset_index(drop=True), previous_cleanedText_3.drop(columns=['id','times']).reset_index(drop=True), previous_cleanedText_4.drop(columns=['id','times']).reset_index(drop=True), 
+                                 previous_cleanedText_5.drop(columns=['id','times']).reset_index(drop=True),previous_cleanedText_6.drop(columns=['id','times']).reset_index(drop=True), previous_cleanedText_7.drop(columns=['id','times']).reset_index(drop=True), previous_cleanedText_8.drop(columns=['id','times']).reset_index(drop=True), 
+                                 previous_cleanedText_9.drop(columns=['id','times']).reset_index(drop=True)], axis=1)
 
 observed_target = observed_result.groupby('id')['game'].apply(', '.join).reset_index(name='concatenated_games')
 
-grouped_cleanedText = previous_cleanedText.groupby('id').agg(lambda x: ', '.join(x.astype(str))).reset_index()
-
 final_target = target_user['game'] 
-
-"""PCA for dim-reduction"""
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-
-X_dim = grouped_cleanedText.shape[1]
-# Perform PCA to reduce the data to 2 principal components
-pca = PCA(n_components=round(X_dim/5))
-pca_cleanedText = pca.fit_transform(grouped_cleanedText)
 
 """Build the KNN model"""
 def knn_evaluate(selected, observed_target, final_target):
@@ -224,7 +243,7 @@ for k in k_values:
     knn = KNeighborsClassifier(n_neighbors=k)
     # Perform cross-validation
     knn.fit(X_train, y_train)
-    selected = knn.predict(X_test)
+    selected = knn.predict_proba(X_test)
     scores = knn_evaluate(selected, observed_target['game'], final_target)
 
     # Append mean accuracy
