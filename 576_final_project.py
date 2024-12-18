@@ -317,7 +317,7 @@ def accuracy_ensemble(top_5_games, top_15_games, final_target):
     accuracy_15 = sum(correct_select_15) / len(final_target)
     return accuracy_5, accuracy_15
 
-top_5_games, top_15_games = ensemble_evaluate(selected, observed_target, game_list, final_target, LSTM_predicted_probabilities)
+top_5_games, top_15_games = ensemble_evaluate(selected, observed_target, y_train, final_target, LSTM_predicted_probabilities)
 ensemble_accuracy = accuracy_ensemble(top_5_games, top_15_games, final_target)
 
 """Logistic Baseline"""
@@ -360,7 +360,7 @@ model.fit(X_train_scaled, y_train)
 # Predict probabilities for all games in the dataset
 log_predicted_probabilities_log = model.predict_proba(scaler.transform(X))
 
-log_accuracy_5, log_prediction_accuracy_15 = accuracy_logistic(game_list, final_target, log_predicted_probabilities)
+log_accuracy_5, log_prediction_accuracy_15 = accuracy_logistic(y_train, final_target, log_predicted_probabilities)
 
 """SVM for comparison"""
 
@@ -380,4 +380,4 @@ svm_model.fit(X_train_scaled, y_train)
 
 # Predict probabilities for all games in the dataset
 SVM_predicted_probabilities = svm_model.predict_proba(scaler.transform(X))[:, 1]
-SVM_accuracy_5, SVM_accuracy_15 = accuracy_logistic(game_list, final_target, SVM_predicted_probabilities)
+SVM_accuracy_5, SVM_accuracy_15 = accuracy_logistic(y_train, final_target, SVM_predicted_probabilities)
