@@ -157,9 +157,14 @@ def get_bert_embeddings_batch(text_list):
     # Compute mean pooling of the embeddings
     return outputs.last_hidden_state.mean(dim=1).cpu().numpy()
 
-observed_user['description_bert'] = get_bert_embeddings_batch(observed_user['game_description'].tolist())
-observed_user['details_bert'] = get_bert_embeddings_batch(observed_user['game_details'].tolist())
-observed_user['tags_bert'] = get_bert_embeddings_batch(observed_user['popular_tags'].tolist())
+def store_embeddings_in_dataframe(df, column_name, embedding_function):
+    embeddings = embedding_function(df[column_name].tolist())
+    df[f'{column_name}_bert'] = [list(embed) for embed in embeddings]  # Ensure each embedding is stored as a list
+
+# Apply the embedding function to each relevant column
+store_embeddings_in_dataframe(observed_user, 'game_description', get_bert_embeddings_batch)
+store_embeddings_in_dataframe(observed_user, 'game_details', get_bert_embeddings_batch)
+store_embeddings_in_dataframe(observed_user, 'popular_tags', get_bert_embeddings_batch)
 
 observed_result = observed_user[['id','game']]
 previous_cleanedText = pd.concat([observed_user['id'],observed_user['original_price'], observed_user['description_bert'],
