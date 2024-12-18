@@ -51,19 +51,21 @@ filtered_ids = user_counts[user_counts > 9].index
 
 # Select rows corresponding to those IDs
 final_users = steam_final[steam_final['id'].isin(filtered_ids)]
-
-for user_id, group in final_users.groupby('id'):
-    if len(group) >= 10:
-        group_sorted = group.head(10)
-        observed.append(group_sorted.iloc[:9].reset_index(drop=True))
-        target.append(group_sorted.iloc[9:10].reset_index(drop=True))
-observed_user = pd.concat(observed)
-target_user = pd.concat(target)
-
 final_users.to_csv('/content/final_users.csv', index=False)
 
 final_users = pd.read_csv("final_users.csv")
 final_users.head()
+
+for user_id, group in final_users.groupby('id'):
+    if len(group) >= 6:
+        # Sort and extract the first 5 as observed and the 6th as the target
+        group_sorted = group.head(6)
+        observed.append(group_sorted.iloc[:5].reset_index(drop=True))
+        target.append(group_sorted.iloc[5:6].reset_index(drop=True))
+
+# Combine all observed and target users into DataFrames
+observed_user = pd.concat(observed, ignore_index=True)
+target_user = pd.concat(target, ignore_index=True)
 
 observed_user['game'].describe()
 
